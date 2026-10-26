@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>桃鐵地圖導出編輯器-需要已有座標位置 (精簡版V3.1)</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 12px; background: #0f172a; color: #f8fafc; font-size: 13px; user-select: none; -webkit-user-select: none; }
+.box { background: #1e293b; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2); margin-bottom: 12px; border: 1px solid #334155; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.btn { padding: 8px 14px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; touch-action: manipulation; transition: background 0.2s; }
+.btn:hover { opacity: 0.9; }
+textarea { width: 100%; height: 70px; font-family: monospace; font-size: 11px; box-sizing: border-box; background: #0f172a; color: #38bdf8; border: 1px solid #475569; border-radius: 6px; padding: 6px; }
+input[type="number"] { font-size: 13px; padding: 4px; background: #0f172a; color: #f8fafc; border: 1px solid #475569; border-radius: 4px; }
+h3 { margin: 0 0 8px 0; font-size: 14px; color: #38bdf8; display: flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+
+<!-- 1. 原始座標轉換與中文地名提取模組 -->
+<div class="box" style="border-left: 4px solid #f59e0b;">
+    <h3>🗺️ 原始座標批次網格轉換與地名提取工具</h3>
+    <div style="font-size:11px; color:#94a3b8; margin-bottom:8px;">貼上原始座標字串，可選擇轉換網格或獨立提取所有中文地名 (Label)：</div>
+    
+    <div class="row" style="gap:8px; margin-bottom:8px; font-size:11px;">
+        <span>Origin X: <input type="number" id="convOx" value="618.10" step="0.01" style="width:75px; text-align:center;"></span>
+        <span>Origin Y: <input type="number" id="convOy" value="489.14" step="0.01" style="width:75px; text-align:center;"></span>
+        <span>Step X: <input type="number" id="convSx" value="9.70" step="0.01" style="width:65px; text-align:center;"></span>
+        <span>Step Y: <input type="number" id="convSy" value="9.70" step="0.01" style="width:65px; text-align:center;"></span>
+    </div>
+    
+    <textarea id="convInput" placeholder="請在此貼上原始座標陣列..."></textarea>
+    
+    <div class="row" style="margin-top:8px; gap:8px;">
+        <button class="btn" style="background:#d97706; color:white;" onclick="convertAndLoadToRegion()">🚀 自動轉換並載入</button>
+        <button class="btn" style="background:#059669; color:white;" onclick="extractAllLabels()">🔍 僅提取中文地名</button>
+        <span id="convOk" style="color:#34d399; font-weight:bold; display:none;"></span>
+    </div>
+
+    <!-- 提取結果顯示區 -->
+    <div id="labelResultBox" style="display:none; margin-top:10px; background:#0f172a; padding:10px; border:1px solid #475569; border-radius:6px;">
+        <div style="font-size:11px; font-weight:bold; color:#f8fafc; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+            <span>🏷️ 提取出的中文地名列表 (<span id="labelCount" style="color:#38bdf8;">0</span> 筆)：</span>
+            <button class="btn" style="background:#2563eb; color:white; padding:3px 8px; font-size:10px;" onclick="copyExtractedLabels()">📋 複製地名陣列</button>
+        </div>
+        <textarea id="extractedLabelsOutput" readonly style="height:50px; background:#1e293b;"></textarea>
+    </div>
+</div>
+
+<!-- 2. 數據導出面板 -->
+<div class="box" style="border-left: 4px solid #8b5cf6;">
+    <h3>📊 數據導出與面板</h3>
+    <div style="font-size:11px; color:#94a3b8; margin-top:4px;">🎯 軌跡：</div>
+    <textarea id="outPath" readonly style="margin-top:4px;"></textarea>
+    <div class="row" style="margin-top:8px; gap:8px;">
+        <button class="btn" style="background:#7c3aed; color:white;" onclick="generateTextGridModal()">🗺️ 產生網格視覺化對照</button>
+        <button class="btn" style="background:#475569; color:white;" onclick="copyJSON()">💻 複製區域 JSON</button>
+    </div>
+</div>
+
+<!-- 全螢幕對照視窗 -->
+<div id="textGridModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.92); z-index:9999; flex-direction:column; box-sizing:border-box;">
+    <div style="background:#1e293b; width:100%; height:100%; display:flex; flex-direction:column; gap:8px; box-sizing:border-box; padding:12px; border: 1px solid #334155;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #475569; padding-bottom:8px;">
+            <strong style="font-size:15px; color:#38bdf8;">🗺️ 網格視覺化對照編輯器</strong>
+            <button class="btn" style="background:#ef4444; color:white; padding:6px 12px;" onclick="closeTextGridModal()">✕ 關閉</button>
+        </div>
+        <div style="flex:1; display:flex; gap:10px; overflow:hidden; width:100%; box-sizing:border-box;">
+            <div id="htmlVisualContainer" style="flex:1; background:#0f172a; padding:15px; border-radius:6px; overflow:auto; display:flex; flex-direction:column; gap:0px; align-items:flex-start; position:relative; border:1px solid #475569;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let db = { path: [], types: {}, labelMap: {}, jpMap: {} };
+
+function render() {
+    document.getElementById('outPath').value = db.path.map(p => `(${p.x},${p.y})`).join('');
+}
+
+function extractAllLabels() {
+    let rawText = document.getElementById('convInput').value;
+    if (!rawText || !rawText.trim()) { alert("請先在文字框中輸入資料！"); return; }
+    let blocks = rawText.replace(/[\t\r\n]+/g, ' ').trim().match(/\{\s*[\s\S]*?\s*\}/g);
+    if (!blocks) { alert("無法讀取到有效的物件區塊 {...}"); return; }
+
+    let labels = [];
+    blocks.forEach(block => {
+        let m = block.match(/["']?label["']?\s*:\s*["']?([^,"'}]+)["']?/i);
+        if (m) {
+            let s = m[1].replace(/['"]/g, '').trim();
+            if (s) labels.push(s);
+        }
+    });
+
+    if (labels.length === 0) { alert("未找到任何 label 欄位！"); return; }
+    document.getElementById('labelResultBox').style.display = 'block';
+    document.getElementById('labelCount').innerText = labels.length;
+    document.getElementById('extractedLabelsOutput').value = JSON.stringify(labels, null, 2);
+}
+
+function copyExtractedLabels() {
+    let output = document.getElementById('extractedLabelsOutput').value;
+    if (!output) return;
+    navigator.clipboard.writeText(output);
+    alert("已成功將中文地名陣列複製到剪貼簿！");
+}
+
+function convertAndLoadToRegion() {
+    let rawText = document.getElementById('convInput').value;
+    if (!rawText || !rawText.trim()) { alert("請先輸入原始座標資料！"); return; }
+    
+    let ox = parseFloat(document.getElementById('convOx').value);
+    let oy = parseFloat(document.getElementById('convOy').value);
+    let sx = parseFloat(document.getElementById('convSx').value);
+    let sy = parseFloat(document.getElementById('convSy').value);
+
+    try {
+        let blocks = rawText.replace(/[\t\r\n]+/g, ' ').trim().match(/\{\s*[\s\S]*?\s*\}/g);
+        if (!blocks) throw new Error("無法辨識到有效的物件區塊 {...}");
+
+        let extractedItems = [];
+        blocks.forEach(block => {
+            let cm = block.match(/["']?coords["']?\s*:\s*\[\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\]/i);
+            if (!cm) return;
+            let rawY = parseFloat(cm[1]), rawX = parseFloat(cm[2]);
+            let lm = block.match(/["']?label["']?\s*:\s*["']?([^,"'}]+)["']?/i);
+            let jm = block.match(/["']?jpname["']?\s*:\s*["']?([^,"'}]+)["']?/i);
+
+            extractedItems.push({
+                x: Math.round((rawX - ox) / sx),
+                y: Math.round((rawY - oy) / sy), // 已修訂為正向 (rawY - oy)
+                type: "normal",
+                label: lm ? lm[1].replace(/['"]/g, '').trim() : "",
+                jpname: jm ? jm[1].replace(/['"]/g, '').trim() : ""
+            });
+        });
+
+        if (extractedItems.length === 0) throw new Error("未解析到任何包含 coords 座標的資料。");
+
+        db.path = []; db.types = {}; db.labelMap = {}; db.jpMap = {};
+
+        extractedItems.forEach(item => {
+            if (!db.path.some(p => p.x === item.x && p.y === item.y)) {
+                db.path.push({ x: item.x, y: item.y });
+                db.types[`${item.x},${item.y}`] = item.type;
+                db.labelMap[`${item.x},${item.y}`] = item.label;
+                db.jpMap[`${item.x},${item.y}`] = item.jpname;
+            }
+        });
+
+        render();
+        
+        let m = document.getElementById("convOk");
+        m.innerText = `✓ 成功轉化 ${extractedItems.length} 筆！`;
+        m.style.display = "inline";
+        setTimeout(() => m.style.display = "none", 3000);
+    } catch (error) {
+        alert("轉換失敗！原因: " + error.message);
+    }
+}
+
+function generateTextGridModal() {
+    if (db.path.length === 0) { alert("目前尚無軌跡節點！"); return; }
+
+    let minX = db.path[0].x, maxX = db.path[0].x, minY = db.path[0].y, maxY = db.path[0].y;
+    db.path.forEach(p => {
+        if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+    });
+
+    let htmlBuilder = [`<div style="display:flex; flex-direction:column; font-family:monospace; background:#0f172a; padding:15px; border-radius:6px;">`];
+    for (let y = maxY; y >= minY; y--) {
+        let nodeRow = [];
+        for (let x = minX; x <= maxX; x++) {
+            let exists = db.path.some(p => p.x === x && p.y === y);
+            let label = db.labelMap[`${x},${y}`] || "";
+            if (exists) {
+                nodeRow.push(`
+                    <div style="background:#7c3aed; color:white; width:64px; height:42px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid #475569; padding:2px; box-sizing:border-box;">
+                        <span style="font-size:11px; font-weight:bold;">${label || '站'}</span>
+                        <span style="font-size:9px; color:#fef08a;">(${x},${y})</span>
+                    </div>
+                `);
+            } else {
+                nodeRow.push(`<div style="width:64px; height:42px; background:#1e293b; border:1px dashed #475569; display:flex; align-items:center; justify-content:center; color:#64748b; font-size:10px; box-sizing:border-box;">+(${x},${y})</div>`);
+            }
+        }
+        htmlBuilder.push(`<div style="display:flex;">${nodeRow.join('')}</div>`);
+    }
+    htmlBuilder.push(`</div>`);
+    document.getElementById('htmlVisualContainer').innerHTML = htmlBuilder.join('');
+    document.getElementById('textGridModal').style.display = 'flex';
+}
+
+function closeTextGridModal() { document.getElementById('textGridModal').style.display = 'none'; }
+
+function copyJSON() {
+    let result = db.path.map(p => ({
+        x: p.x, y: p.y,
+        type: db.types[`${p.x},${p.y}`] || "normal",
+        label: db.labelMap[`${p.x},${p.y}`] || "",
+        jpname: db.jpMap[`${p.x},${p.y}`] || ""
+    }));
+    navigator.clipboard.writeText(JSON.stringify(result, null, 2));
+    alert("已成功複製標準 JSON 到剪貼簿！");
+}
+</script>
+</body>
+</html>
