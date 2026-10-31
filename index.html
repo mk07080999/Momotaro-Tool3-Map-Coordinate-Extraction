@@ -1,137 +1,227 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="UTF-8">
+<html lang="zh-TW"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>桃鐵地圖導出編輯器-需要已有座標位置 (精簡版V3.1)</title>
+<title>桃鐵地圖導出編輯器 (精簡版V5.4)</title>
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 12px; background: #0f172a; color: #f8fafc; font-size: 13px; user-select: none; -webkit-user-select: none; }
-.box { background: #1e293b; padding: 12px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2); margin-bottom: 12px; border: 1px solid #334155; }
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.btn { padding: 8px 14px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; touch-action: manipulation; transition: background 0.2s; }
+/* 全域基礎設定：預設字體 24px */
+:root { --base-font-size: 24px; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 14px; background: #0f172a; color: #f8fafc; font-size: var(--base-font-size); user-select: none; -webkit-user-select: none; }
+.box { background: #1e293b; padding: 14px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2); margin-bottom: 14px; border: 1px solid #334155; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.btn { padding: calc(var(--base-font-size) * 0.5) calc(var(--base-font-size) * 1); font-size: var(--base-font-size); border: none; border-radius: 6px; cursor: pointer; font-weight: bold; touch-action: manipulation; transition: background 0.2s; }
 .btn:hover { opacity: 0.9; }
-textarea { width: 100%; height: 70px; font-family: monospace; font-size: 11px; box-sizing: border-box; background: #0f172a; color: #38bdf8; border: 1px solid #475569; border-radius: 6px; padding: 6px; }
-input[type="number"] { font-size: 13px; padding: 4px; background: #0f172a; color: #f8fafc; border: 1px solid #475569; border-radius: 4px; }
-h3 { margin: 0 0 8px 0; font-size: 14px; color: #38bdf8; display: flex; align-items: center; gap: 6px; }
+textarea { width: 100%; height: 90px; font-family: monospace; font-size: calc(var(--base-font-size) * 0.85); box-sizing: border-box; background: #0f172a; color: #38bdf8; border: 1px solid #475569; border-radius: 6px; padding: 8px; }
+
+/* 標題與狀態提示文字並排於左側 */
+.section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+h3 { margin: 0; font-size: calc(var(--base-font-size) * 1.05); color: #38bdf8; display: flex; align-items: center; gap: 6px; }
+.status-tip { font-size: var(--base-font-size); color: #94a3b8; font-weight: bold; background: #0f172a; padding: 4px 10px; border-radius: 4px; border: 1px solid #334155; display: inline-block; }
+
+/* 中文地名列表：完整展開、不需滾輪、固定每排 6 個 */
+#interactiveLabelContainer {
+    display: grid; 
+    grid-template-columns: repeat(6, 1fr); 
+    gap: 8px; 
+    background: #0f172a; 
+    padding: 12px; 
+    border: 1px solid #475569; 
+    border-radius: 6px;
+}
+.label-tag { 
+    background: #334155; 
+    color: #38bdf8; 
+    border: 1px solid #475569; 
+    padding: 8px 6px; 
+    border-radius: 6px; 
+    cursor: pointer; 
+    font-size: var(--base-font-size); 
+    font-weight: bold; 
+    transition: all 0.2s; 
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.label-tag:hover { background: #2563eb; color: white; border-color: #3b82f6; }
+.label-tag.highlight { background: #059669 !important; color: #fff !important; border-color: #34d399 !important; transform: scale(1.05); }
+
+/* 響應式：螢幕較小時自動調整每排數量 */
+@media (max-width: 768px) {
+    #interactiveLabelContainer { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 480px) {
+    #interactiveLabelContainer { grid-template-columns: repeat(3, 1fr); }
+}
 </style>
 </head>
 <body>
 
-<!-- 1. 原始座標轉換與中文地名提取模組 -->
+<!-- 1. 原始座標轉換與管理模組 -->
 <div class="box" style="border-left: 4px solid #f59e0b;">
-    <h3>🗺️ 原始座標批次網格轉換與地名提取工具</h3>
-    <div style="font-size:11px; color:#94a3b8; margin-bottom:8px;">貼上原始座標字串，可選擇轉換網格或獨立提取所有中文地名 (Label)：</div>
-    
-    <div class="row" style="gap:8px; margin-bottom:8px; font-size:11px;">
-        <span>Origin X: <input type="number" id="convOx" value="618.10" step="0.01" style="width:75px; text-align:center;"></span>
-        <span>Origin Y: <input type="number" id="convOy" value="489.14" step="0.01" style="width:75px; text-align:center;"></span>
-        <span>Step X: <input type="number" id="convSx" value="9.70" step="0.01" style="width:65px; text-align:center;"></span>
-        <span>Step Y: <input type="number" id="convSy" value="9.70" step="0.01" style="width:65px; text-align:center;"></span>
-    </div>
-    
-    <textarea id="convInput" placeholder="請在此貼上原始座標陣列..."></textarea>
-    
-    <div class="row" style="margin-top:8px; gap:8px;">
-        <button class="btn" style="background:#d97706; color:white;" onclick="convertAndLoadToRegion()">🚀 自動轉換並載入</button>
-        <button class="btn" style="background:#059669; color:white;" onclick="extractAllLabels()">🔍 僅提取中文地名</button>
-        <span id="convOk" style="color:#34d399; font-weight:bold; display:none;"></span>
-    </div>
-
-    <!-- 提取結果顯示區 -->
-    <div id="labelResultBox" style="display:none; margin-top:10px; background:#0f172a; padding:10px; border:1px solid #475569; border-radius:6px;">
-        <div style="font-size:11px; font-weight:bold; color:#f8fafc; margin-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
-            <span>🏷️ 提取出的中文地名列表 (<span id="labelCount" style="color:#38bdf8;">0</span> 筆)：</span>
-            <button class="btn" style="background:#2563eb; color:white; padding:3px 8px; font-size:10px;" onclick="copyExtractedLabels()">📋 複製地名陣列</button>
+    <div class="section-header">
+        <h3>🗺️ 原始座標批次網格轉換工具</h3>
+        <span id="convOk" class="status-tip">💡 貼上資料後點擊轉換</span>
+        
+        <!-- 字體大小調整控制區塊 (範圍 12~36，預設 24 在正中間) -->
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 16px; color: #94a3b8;" onwheel="handleFontWheel(event)">
+            <span>字體:</span>
+            <button class="btn" style="padding: 4px 10px; font-size: 16px; background: #334155; color: white;" onclick="adjustFontSize(-2)">-</button>
+            <!-- min=12, max=36，中心點剛好是 24 -->
+            <input type="range" id="fontSizeRange" min="12" max="36" step="2" value="24" oninput="setFontSize(this.value)" style="cursor: pointer; width: 100px; accent-color: #38bdf8;" title="可在此處直接滾動滑鼠滾輪調整字體">
+            <button class="btn" style="padding: 4px 10px; font-size: 16px; background: #334155; color: white;" onclick="adjustFontSize(2)">+</button>
+            <button class="btn" style="padding: 4px 10px; font-size: 14px; background: #475569; color: white;" onclick="resetFontSize()">預設</button>
+            <span id="fontSizeDisplay" style="color: #38bdf8; font-weight: bold; min-width: 45px; text-align: center;">24px</span>
         </div>
-        <textarea id="extractedLabelsOutput" readonly style="height:50px; background:#1e293b;"></textarea>
+    </div>
+    
+    <div style="font-size: calc(var(--base-font-size) * 0.85); color:#94a3b8; margin: 6px 0 8px 0;">貼上原始座標字串，轉換網格並自動同步提取中文地名按鈕：</div>
+    
+    <textarea id="convInput" placeholder="請在此貼上原始座標內容..."></textarea>
+    
+    <div class="row" style="margin-top:10px; gap:8px;">
+        <button class="btn" style="background:#d97706; color:white;" onclick="convertAndLoadToRegion()">🚀 轉換座標</button>
+        <button class="btn" style="background:#0284c7; color:white;" onclick="copyConvInput()">📋 複製座標</button>
+        <button class="btn" style="background:#0d9488; color:white;" onclick="exportConvInputFile()">💾 導出座標</button>
+        <button class="btn" style="background:#475569; color:white;" onclick="document.getElementById('importConvFile').click()">📂 導入座標</button>
+        <button class="btn" style="background:#dc2626; color:white;" onclick="resetAllApp()">🔄 全部重來</button>
+        
+        <input type="file" id="importConvFile" accept=".json,.txt" style="display:none" onchange="importConvInputFile(event)">
     </div>
 </div>
 
 <!-- 2. 數據導出面板 -->
 <div class="box" style="border-left: 4px solid #8b5cf6;">
-    <h3>📊 數據導出與面板</h3>
-    <div style="font-size:11px; color:#94a3b8; margin-top:4px;">🎯 軌跡：</div>
-    <textarea id="outPath" readonly style="margin-top:4px;"></textarea>
-    <div class="row" style="margin-top:8px; gap:8px;">
-        <button class="btn" style="background:#7c3aed; color:white;" onclick="generateTextGridModal()">🗺️ 產生網格視覺化對照</button>
-        <button class="btn" style="background:#475569; color:white;" onclick="copyJSON()">💻 複製區域 JSON</button>
+    <div class="section-header">
+        <h3>📊 數據導出與面板</h3>
+        <span id="jsonStatusTip" class="status-tip">💡 點擊下方按鈕進行操作</span>
+    </div>
+    <div style="font-size: calc(var(--base-font-size) * 0.85); color:#94a3b8; margin-bottom:4px;">🎯 軌跡：</div>
+    <textarea id="outPath" readonly="" style="margin-top:2px;"></textarea>
+    <div class="row" style="margin-top:10px; gap:8px;">
+        <button class="btn" style="background:#7c3aed; color:white;" onclick="generateTextGridModal()">🗺️ 視覺化對照</button>
+        <button class="btn" id="copyJsonBtn" style="background:#2563eb; color:white;" onclick="copyJSON()">💻 複製JSON</button>
+        <button class="btn" style="background:#059669; color:white;" onclick="exportJSONFile()">💾 導出JSON</button>
+        <button class="btn" style="background:#475569; color:white;" onclick="document.getElementById('importFile').click()">📂 導入JSON</button>
+        
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSONFile(event)">
+    </div>
+</div>
+
+<!-- 3. 提取出的中文地名互動清單 (完整展開) -->
+<div class="box" style="border-left: 4px solid #06b6d4; display: block;" id="labelResultBox">
+    <div class="section-header">
+        <h3>🏷️ 提取出的中文地名列表 (<span id="labelCount" style="color:#38bdf8;">0</span> 筆)</h3>
+        <span id="copyStatusTip" class="status-tip">💡 點擊下方地名即可複製</span>
+    </div>
+    <div id="interactiveLabelContainer">
+        <span style="color: #64748b; font-size: var(--base-font-size); grid-column: span 6; text-align: center; padding: 10px;">尚無提取資料，請先進行轉換座標。</span>
     </div>
 </div>
 
 <!-- 全螢幕對照視窗 -->
-<div id="textGridModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.92); z-index:9999; flex-direction:column; box-sizing:border-box;">
-    <div style="background:#1e293b; width:100%; height:100%; display:flex; flex-direction:column; gap:8px; box-sizing:border-box; padding:12px; border: 1px solid #334155;">
+<div id="textGridModal" style="display: none; position: fixed; top: 0px; left: 0px; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.92); z-index: 9999; flex-direction: column; box-sizing: border-box;">
+    <div style="background:#1e293b; width:100%; height:100%; display:flex; flex-direction:column; gap:8px; box-sizing:border-box; padding:14px; border: 1px solid #334155;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #475569; padding-bottom:8px;">
-            <strong style="font-size:15px; color:#38bdf8;">🗺️ 網格視覺化對照編輯器</strong>
-            <button class="btn" style="background:#ef4444; color:white; padding:6px 12px;" onclick="closeTextGridModal()">✕ 關閉</button>
+            <strong style="font-size: calc(var(--base-font-size) * 1.1); color:#38bdf8;">🗺️ 網格視覺化對照編輯器</strong>
+            <button class="btn" style="background:#ef4444; color:white;" onclick="closeTextGridModal()">✕ 關閉</button>
         </div>
         <div style="flex:1; display:flex; gap:10px; overflow:hidden; width:100%; box-sizing:border-box;">
-            <div id="htmlVisualContainer" style="flex:1; background:#0f172a; padding:15px; border-radius:6px; overflow:auto; display:flex; flex-direction:column; gap:0px; align-items:flex-start; position:relative; border:1px solid #475569;"></div>
+            <div id="htmlVisualContainer" style="flex:1; background:#0f172a; padding:15px; border-radius:6px; overflow:auto; display:flex; flex-direction:column; gap:0px; align-items:flex-start; position:relative; border:1px solid #475569;">
+            </div>
         </div>
     </div>
 </div>
 
 <script>
 let db = { path: [], types: {}, labelMap: {}, jpMap: {} };
+let currentFontSize = 24;
+
+// 直接設定字體大小
+function setFontSize(size) {
+    currentFontSize = parseInt(size);
+    if (currentFontSize < 12) currentFontSize = 12;
+    if (currentFontSize > 36) currentFontSize = 36;
+    
+    document.documentElement.style.setProperty('--base-font-size', currentFontSize + 'px');
+    
+    let rangeEl = document.getElementById('fontSizeRange');
+    let dispEl = document.getElementById('fontSizeDisplay');
+    if (rangeEl) rangeEl.value = currentFontSize;
+    if (dispEl) dispEl.innerText = currentFontSize + 'px';
+}
+
+// 滑鼠滾輪即時調整字體 (向上滾放大、向下滾縮小)
+function handleFontWheel(event) {
+    event.preventDefault();
+    let delta = event.deltaY < 0 ? 2 : -2;
+    setFontSize(currentFontSize + delta);
+}
+
+// 點擊加減按鈕
+function adjustFontSize(delta) {
+    setFontSize(currentFontSize + delta);
+}
+
+// 回到預設大小 (24px，剛好在滑桿正中間)
+function resetFontSize() {
+    setFontSize(24);
+    let m = document.getElementById("convOk");
+    if (m) {
+        m.innerHTML = `<span style="color: #34d399;">✓ 已重設字體：24px</span>`;
+        m.style.borderColor = '#059669';
+        setTimeout(() => {
+            m.innerHTML = `💡 貼上資料後點擊轉換`;
+            m.style.borderColor = '#334155';
+            m.style.color = '#94a3b8';
+        }, 2000);
+    }
+}
 
 function render() {
-    document.getElementById('outPath').value = db.path.map(p => `(${p.x},${p.y})`).join('');
+    let outPathEl = document.getElementById('outPath');
+    if (outPathEl) {
+        outPathEl.value = db.path.map(p => `(${p.x},${p.y})`).join('');
+    }
 }
 
-function extractAllLabels() {
-    let rawText = document.getElementById('convInput').value;
-    if (!rawText || !rawText.trim()) { alert("請先在文字框中輸入資料！"); return; }
-    let blocks = rawText.replace(/[\t\r\n]+/g, ' ').trim().match(/\{\s*[\s\S]*?\s*\}/g);
-    if (!blocks) { alert("無法讀取到有效的物件區塊 {...}"); return; }
-
-    let labels = [];
-    blocks.forEach(block => {
-        let m = block.match(/["']?label["']?\s*:\s*["']?([^,"'}]+)["']?/i);
-        if (m) {
-            let s = m[1].replace(/['"]/g, '').trim();
-            if (s) labels.push(s);
-        }
-    });
-
-    if (labels.length === 0) { alert("未找到任何 label 欄位！"); return; }
-    document.getElementById('labelResultBox').style.display = 'block';
-    document.getElementById('labelCount').innerText = labels.length;
-    document.getElementById('extractedLabelsOutput').value = JSON.stringify(labels, null, 2);
-}
-
-function copyExtractedLabels() {
-    let output = document.getElementById('extractedLabelsOutput').value;
-    if (!output) return;
-    navigator.clipboard.writeText(output);
-    alert("已成功將中文地名陣列複製到剪貼簿！");
-}
-
+// 轉換座標與提取地名
 function convertAndLoadToRegion() {
-    let rawText = document.getElementById('convInput').value;
-    if (!rawText || !rawText.trim()) { alert("請先輸入原始座標資料！"); return; }
+    let rawTextEl = document.getElementById('convInput');
+    let m = document.getElementById("convOk");
+    if (!rawTextEl || !rawTextEl.value.trim()) {
+        if (m) {
+            m.innerHTML = `<span style="color: #ef4444;">⚠️ 請先輸入原始座標資料</span>`;
+            m.style.borderColor = '#dc2626';
+        }
+        return;
+    }
     
-    let ox = parseFloat(document.getElementById('convOx').value);
-    let oy = parseFloat(document.getElementById('convOy').value);
-    let sx = parseFloat(document.getElementById('convSx').value);
-    let sy = parseFloat(document.getElementById('convSy').value);
+    let rawText = rawTextEl.value;
+    let ox = 618.10, oy = 489.14, sx = 9.70, sy = 9.70;
 
     try {
         let blocks = rawText.replace(/[\t\r\n]+/g, ' ').trim().match(/\{\s*[\s\S]*?\s*\}/g);
         if (!blocks) throw new Error("無法辨識到有效的物件區塊 {...}");
 
         let extractedItems = [];
+        let labels = [];
+
         blocks.forEach(block => {
             let cm = block.match(/["']?coords["']?\s*:\s*\[\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\]/i);
             if (!cm) return;
             let rawY = parseFloat(cm[1]), rawX = parseFloat(cm[2]);
+            
             let lm = block.match(/["']?label["']?\s*:\s*["']?([^,"'}]+)["']?/i);
             let jm = block.match(/["']?jpname["']?\s*:\s*["']?([^,"'}]+)["']?/i);
 
+            let labelStr = lm ? lm[1].replace(/['"]/g, '').trim() : "";
+            if (labelStr) labels.push(labelStr);
+
             extractedItems.push({
                 x: Math.round((rawX - ox) / sx),
-                y: Math.round((rawY - oy) / sy), // 已修訂為正向 (rawY - oy)
-                type: "normal",
-                label: lm ? lm[1].replace(/['"]/g, '').trim() : "",
+                y: Math.round((rawY - oy) / sy),
+                label: labelStr,
                 jpname: jm ? jm[1].replace(/['"]/g, '').trim() : ""
             });
         });
@@ -143,25 +233,173 @@ function convertAndLoadToRegion() {
         extractedItems.forEach(item => {
             if (!db.path.some(p => p.x === item.x && p.y === item.y)) {
                 db.path.push({ x: item.x, y: item.y });
-                db.types[`${item.x},${item.y}`] = item.type;
+                db.types[`${item.x},${item.y}`] = "normal";
                 db.labelMap[`${item.x},${item.y}`] = item.label;
                 db.jpMap[`${item.x},${item.y}`] = item.jpname;
             }
         });
 
         render();
+        updateInteractiveLabels(labels);
         
-        let m = document.getElementById("convOk");
-        m.innerText = `✓ 成功轉化 ${extractedItems.length} 筆！`;
-        m.style.display = "inline";
-        setTimeout(() => m.style.display = "none", 3000);
+        if (m) {
+            m.innerHTML = `<span style="color: #34d399;">✓ 成功轉化</span> <span style="color: #fef08a;">${extractedItems.length} 筆</span>`;
+            m.style.borderColor = '#059669';
+        }
     } catch (error) {
-        alert("轉換失敗！原因: " + error.message);
+        if (m) {
+            m.innerHTML = `<span style="color: #ef4444;">⚠️ 轉換失敗</span>`;
+            m.style.borderColor = '#dc2626';
+        }
     }
 }
 
+// 複製上方輸入框內容
+function copyConvInput() {
+    let textEl = document.getElementById('convInput');
+    let m = document.getElementById("convOk");
+    if (!textEl || !textEl.value.trim()) {
+        if (m) {
+            m.innerHTML = `<span style="color: #ef4444;">⚠️ 無內容可複製</span>`;
+            m.style.borderColor = '#dc2626';
+        }
+        return;
+    }
+    
+    navigator.clipboard.writeText(textEl.value);
+    if (m) {
+        m.innerHTML = `<span style="color: #34d399;">✓ 已成功複製</span> <span style="color: #fef08a;">上方視窗內容</span>`;
+        m.style.borderColor = '#059669';
+        setTimeout(() => {
+            m.innerHTML = `💡 貼上資料後點擊轉換`;
+            m.style.borderColor = '#334155';
+            m.style.color = '#94a3b8';
+        }, 2500);
+    }
+}
+
+// 導出上方輸入框內容
+function exportConvInputFile() {
+    let textEl = document.getElementById('convInput');
+    let m = document.getElementById("convOk");
+    if (!textEl || !textEl.value.trim()) {
+        if (m) {
+            m.innerHTML = `<span style="color: #ef4444;">⚠️ 無內容可導出</span>`;
+            m.style.borderColor = '#dc2626';
+        }
+        return;
+    }
+    
+    let dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(textEl.value);
+    let downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "momotaro_coords_source.txt");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+
+    if (m) {
+        m.innerHTML = `<span style="color: #34d399;">💾 導出成功</span>`;
+        m.style.borderColor = '#059669';
+    }
+}
+
+// 導入檔案並自動執行轉換
+function importConvInputFile(event) {
+    let file = event.target.files[0];
+    if (!file) return;
+
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        let textEl = document.getElementById('convInput');
+        if (textEl) textEl.value = e.target.result;
+        
+        convertAndLoadToRegion();
+        
+        let m = document.getElementById("convOk");
+        if (m && m.innerHTML.includes("成功轉化")) {
+            m.innerHTML = `<span style="color: #34d399;">📂 成功導入並自動轉化</span>`;
+        }
+        
+        event.target.value = '';
+    };
+    reader.readAsText(file);
+}
+
+// 全部重來
+function resetAllApp() {
+    db = { path: [], types: {}, labelMap: {}, jpMap: {} };
+    let convInputEl = document.getElementById('convInput');
+    let outPathEl = document.getElementById('outPath');
+    if (convInputEl) convInputEl.value = '';
+    if (outPathEl) outPathEl.value = '';
+    
+    let container = document.getElementById('interactiveLabelContainer');
+    if (container) {
+        container.innerHTML = `<span style="color: #64748b; font-size: var(--base-font-size); grid-column: span 6; text-align: center; padding: 10px;">尚無提取資料，請先進行轉換座標。</span>`;
+    }
+    let labelCountEl = document.getElementById('labelCount');
+    if (labelCountEl) labelCountEl.innerText = '0';
+
+    let convOk = document.getElementById("convOk");
+    if (convOk) {
+        convOk.innerHTML = `🔄 已全部重來`;
+        convOk.style.borderColor = '#dc2626';
+        convOk.style.color = '#f8fafc';
+        setTimeout(() => {
+            convOk.innerHTML = `💡 貼上資料後點擊轉換`;
+            convOk.style.borderColor = '#334155';
+            convOk.style.color = '#94a3b8';
+        }, 2500);
+    }
+}
+
+// 更新下方地名清單
+function updateInteractiveLabels(labels) {
+    let container = document.getElementById('interactiveLabelContainer');
+    let labelCountEl = document.getElementById('labelCount');
+    if (labelCountEl) labelCountEl.innerText = labels.length;
+    
+    if (!container) return;
+
+    if (labels.length === 0) {
+        container.innerHTML = `<span style="color: #64748b; font-size: var(--base-font-size); grid-column: span 6; text-align: center; padding: 10px;">未找到任何 label 欄位。</span>`;
+        return;
+    }
+
+    container.innerHTML = '';
+    labels.forEach(label => {
+        let tag = document.createElement('div');
+        tag.className = 'label-tag';
+        tag.innerText = label;
+        tag.title = label;
+        tag.onclick = () => {
+            navigator.clipboard.writeText(label);
+            
+            let tip = document.getElementById('copyStatusTip');
+            if (tip) {
+                tip.innerHTML = `<span style="color: #34d399;">✓ 已複製：</span><span style="color: #fef08a;">【${label}】</span>`;
+                tip.style.borderColor = '#059669';
+            }
+            
+            tag.classList.add('highlight');
+            setTimeout(() => {
+                tag.classList.remove('highlight');
+            }, 1000);
+        };
+        container.appendChild(tag);
+    });
+}
+
 function generateTextGridModal() {
-    if (db.path.length === 0) { alert("目前尚無軌跡節點！"); return; }
+    let jsonTip = document.getElementById('jsonStatusTip');
+    if (db.path.length === 0) {
+        if (jsonTip) {
+            jsonTip.innerHTML = `<span style="color: #ef4444;">⚠️ 尚無軌跡節點可視化</span>`;
+            jsonTip.style.borderColor = '#dc2626';
+        }
+        return;
+    }
 
     let minX = db.path[0].x, maxX = db.path[0].x, minY = db.path[0].y, maxY = db.path[0].y;
     db.path.forEach(p => {
@@ -177,34 +415,133 @@ function generateTextGridModal() {
             let label = db.labelMap[`${x},${y}`] || "";
             if (exists) {
                 nodeRow.push(`
-                    <div style="background:#7c3aed; color:white; width:64px; height:42px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid #475569; padding:2px; box-sizing:border-box;">
-                        <span style="font-size:11px; font-weight:bold;">${label || '站'}</span>
-                        <span style="font-size:9px; color:#fef08a;">(${x},${y})</span>
+                    <div style="background:#7c3aed; color:white; width:80px; height:50px; display:flex; flex-direction:column; justify-content:center; align-items:center; border:1px solid #475569; padding:2px; box-sizing:border-box;">
+                        <span style="font-size:14px; font-weight:bold;">${label || '站'}</span>
+                        <span style="font-size:11px; color:#fef08a;">(${x},${y})</span>
                     </div>
                 `);
             } else {
-                nodeRow.push(`<div style="width:64px; height:42px; background:#1e293b; border:1px dashed #475569; display:flex; align-items:center; justify-content:center; color:#64748b; font-size:10px; box-sizing:border-box;">+(${x},${y})</div>`);
+                nodeRow.push(`<div style="width:80px; height:50px; background:#1e293b; border:1px dashed #475569; display:flex; align-items:center; justify-content:center; color:#64748b; font-size:12px; box-sizing:border-box;">+(${x},${y})</div>`);
             }
         }
         htmlBuilder.push(`<div style="display:flex;">${nodeRow.join('')}</div>`);
     }
     htmlBuilder.push(`</div>`);
-    document.getElementById('htmlVisualContainer').innerHTML = htmlBuilder.join('');
-    document.getElementById('textGridModal').style.display = 'flex';
+    
+    let visualContainer = document.getElementById('htmlVisualContainer');
+    let modal = document.getElementById('textGridModal');
+    if (visualContainer) visualContainer.innerHTML = htmlBuilder.join('');
+    if (modal) modal.style.display = 'flex';
 }
 
-function closeTextGridModal() { document.getElementById('textGridModal').style.display = 'none'; }
+function closeTextGridModal() {
+    let modal = document.getElementById('textGridModal');
+    if (modal) modal.style.display = 'none';
+}
 
+// 複製 JSON
 function copyJSON() {
-    let result = db.path.map(p => ({
+    let result = getFormattedJSONData();
+    let jsonTip = document.getElementById('jsonStatusTip');
+    if (result.length === 0) {
+        if (jsonTip) {
+            jsonTip.innerHTML = `<span style="color: #ef4444;">⚠️ 沒有可複製的資料</span>`;
+            jsonTip.style.borderColor = '#dc2626';
+        }
+        return;
+    }
+    
+    navigator.clipboard.writeText(JSON.stringify(result, null, 2));
+    
+    if (jsonTip) {
+        jsonTip.innerHTML = `<span style="color: #34d399;">✓ 已成功複製</span> <span style="color: #fef08a;">JSON 數據</span>`;
+        jsonTip.style.borderColor = '#059669';
+        setTimeout(() => {
+            jsonTip.innerHTML = `💡 點擊下方按鈕進行操作`;
+            jsonTip.style.borderColor = '#334155';
+            jsonTip.style.color = '#94a3b8';
+        }, 2500);
+    }
+}
+
+function getFormattedJSONData() {
+    return db.path.map(p => ({
         x: p.x, y: p.y,
         type: db.types[`${p.x},${p.y}`] || "normal",
         label: db.labelMap[`${p.x},${p.y}`] || "",
         jpname: db.jpMap[`${p.x},${p.y}`] || ""
     }));
-    navigator.clipboard.writeText(JSON.stringify(result, null, 2));
-    alert("已成功複製標準 JSON 到剪貼簿！");
+}
+
+// 導出 JSON 檔案
+function exportJSONFile() {
+    let result = getFormattedJSONData();
+    let jsonTip = document.getElementById('jsonStatusTip');
+    if (result.length === 0) {
+        if (jsonTip) {
+            jsonTip.innerHTML = `<span style="color: #ef4444;">⚠️ 沒有可導出的資料</span>`;
+            jsonTip.style.borderColor = '#dc2626';
+        }
+        return;
+    }
+    
+    let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result, null, 2));
+    let downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "momotaro_map_data.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+
+    if (jsonTip) {
+        jsonTip.innerHTML = `<span style="color: #34d399;">💾 導出 JSON 成功</span>`;
+        jsonTip.style.borderColor = '#059669';
+    }
+}
+
+// 導入 JSON 檔案
+function importJSONFile(event) {
+    let file = event.target.files[0];
+    if (!file) return;
+
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        let jsonTip = document.getElementById('jsonStatusTip');
+        try {
+            let importedData = JSON.parse(e.target.result);
+            if (!Array.isArray(importedData)) throw new Error("JSON 格式不正確");
+
+            db.path = []; db.types = {}; db.labelMap = {}; db.jpMap = {};
+            let labels = [];
+
+            importedData.forEach(item => {
+                if (item.x !== undefined && item.y !== undefined) {
+                    db.path.push({ x: item.x, y: item.y });
+                    let key = `${item.x},${item.y}`;
+                    db.types[key] = item.type || "normal";
+                    db.labelMap[key] = item.label || "";
+                    db.jpMap[key] = item.jpname || "";
+                    if (item.label) labels.push(item.label);
+                }
+            });
+
+            render();
+            updateInteractiveLabels(labels);
+            
+            if (jsonTip) {
+                jsonTip.innerHTML = `<span style="color: #34d399;">📂 成功導入</span> <span style="color: #fef08a;">${db.path.length} 筆資料</span>`;
+                jsonTip.style.borderColor = '#059669';
+            }
+        } catch (err) {
+            if (jsonTip) {
+                jsonTip.innerHTML = `<span style="color: #ef4444;">⚠️ 導入格式錯誤</span>`;
+                jsonTip.style.borderColor = '#dc2626';
+            }
+        }
+        event.target.value = '';
+    };
+    reader.readAsText(file);
 }
 </script>
-</body>
-</html>
+
+</body></html>
